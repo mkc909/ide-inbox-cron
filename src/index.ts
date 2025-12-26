@@ -51,7 +51,7 @@ interface NotionPage {
         name: string;
       };
     };
-    Requested_By?: {
+    "Requested By"?: {
       rich_text: [
         {
           text: {
@@ -318,7 +318,7 @@ function buildNotionPage(databaseId: string, task: TaskPayload): NotionPage {
           }
         ]
       },
-      Requested_By: {
+      "Requested By": {
         rich_text: [
           {
             text: {
