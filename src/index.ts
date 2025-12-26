@@ -28,7 +28,7 @@ interface NotionPage {
     database_id: string;
   };
   properties: {
-    Name: {
+    Request: {
       title: [
         {
           text: {
@@ -37,7 +37,7 @@ interface NotionPage {
         }
       ];
     };
-    Description?: {
+    Details?: {
       rich_text: [
         {
           text: {
@@ -51,15 +51,19 @@ interface NotionPage {
         name: string;
       };
     };
+    Requested_By?: {
+      rich_text: [
+        {
+          text: {
+            content: string;
+          };
+        }
+      ];
+    };
     Status?: {
-      select: {
+      status: {
         name: string;
       };
-    };
-    Tags?: {
-      multi_select: Array<{
-        name: string;
-      }>;
     };
   };
 }
@@ -212,8 +216,7 @@ async function getPendingTasks(env: Env): Promise<TaskPayload[]> {
     tasks.push({
       title: 'Daily Code Review',
       description: `Review pull requests and code changes from ${new Date().toLocaleDateString()}`,
-      priority: 'High',
-      tags: ['review', 'daily']
+      priority: 'High'
     });
   }
 
@@ -222,8 +225,7 @@ async function getPendingTasks(env: Env): Promise<TaskPayload[]> {
     tasks.push({
       title: 'Integration Testing',
       description: 'Run integration tests and verify system health',
-      priority: 'Medium',
-      tags: ['testing', 'daily']
+      priority: 'Medium'
     });
   }
 
@@ -232,8 +234,7 @@ async function getPendingTasks(env: Env): Promise<TaskPayload[]> {
     tasks.push({
       title: 'Deployment Checklist',
       description: 'Verify staging environment and prepare deployment',
-      priority: 'Low',
-      tags: ['deployment', 'daily']
+      priority: 'Low'
     });
   }
 
@@ -295,12 +296,20 @@ async function createNotionPage(env: Env, task: TaskPayload): Promise<{
  * Build Notion page object from task payload
  */
 function buildNotionPage(databaseId: string, task: TaskPayload): NotionPage {
+  // Map priority values to match database options
+  const priorityMap: Record<string, string> = {
+    'Low': 'Low',
+    'Medium': 'Normal',
+    'High': 'High',
+    'Urgent': 'Urgent'
+  };
+
   const page: NotionPage = {
     parent: {
       database_id: databaseId
     },
     properties: {
-      Name: {
+      Request: {
         title: [
           {
             text: {
@@ -308,13 +317,27 @@ function buildNotionPage(databaseId: string, task: TaskPayload): NotionPage {
             }
           }
         ]
+      },
+      Requested_By: {
+        rich_text: [
+          {
+            text: {
+              content: 'IDE Cron Worker'
+            }
+          }
+        ]
+      },
+      Status: {
+        status: {
+          name: task.status || 'New'
+        }
       }
     }
   };
 
   // Add description if provided
   if (task.description) {
-    page.properties.Description = {
+    page.properties.Details = {
       rich_text: [
         {
           text: {
@@ -329,24 +352,8 @@ function buildNotionPage(databaseId: string, task: TaskPayload): NotionPage {
   if (task.priority) {
     page.properties.Priority = {
       select: {
-        name: task.priority
+        name: priorityMap[task.priority] || 'Normal'
       }
-    };
-  }
-
-  // Add status if provided (default to "Not Started")
-  if (task.status) {
-    page.properties.Status = {
-      select: {
-        name: task.status
-      }
-    };
-  }
-
-  // Add tags if provided
-  if (task.tags && task.tags.length > 0) {
-    page.properties.Tags = {
-      multi_select: task.tags.map(tag => ({ name: tag }))
     };
   }
 
