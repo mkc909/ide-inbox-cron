@@ -1,0 +1,23 @@
+name = "ide-inbox-cron"
+main = "src/index.ts"
+compatibility_date = "2025-12-25"
+
+[triggers]
+crons = ["0 * * * *"]
+
+[[env.production.triggers]]
+crons = ["0 * * * *"]
+
+[vars]
+ENVIRONMENT = "production"
+
+# KV Namespace for task queue state (optional)
+# [[kv_namespaces]]
+# binding = "TASK_QUEUE"
+# id = "your-kv-namespace-id"
+
+# D1 Database for logging (optional)
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "ide-inbox-logs"
+# database_id = "your-database-id"
