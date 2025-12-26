@@ -28,31 +28,8 @@ interface NotionPage {
     database_id: string;
   };
   properties: {
-    Request: {
+    Title: {
       title: [
-        {
-          text: {
-            content: string;
-          };
-        }
-      ];
-    };
-    Details?: {
-      rich_text: [
-        {
-          text: {
-            content: string;
-          };
-        }
-      ];
-    };
-    Priority?: {
-      select: {
-        name: string;
-      };
-    };
-    "Requested By"?: {
-      rich_text: [
         {
           text: {
             content: string;
@@ -64,6 +41,25 @@ interface NotionPage {
       status: {
         name: string;
       };
+    };
+    Agent?: {
+      select: {
+        name: string;
+      };
+    };
+    "Content Type"?: {
+      select: {
+        name: string;
+      };
+    };
+    Notes?: {
+      rich_text: [
+        {
+          text: {
+            content: string;
+          };
+        }
+      ];
     };
   };
 }
@@ -143,7 +139,13 @@ export default {
       return Response.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
-        service: 'ide-inbox-cron'
+        service: 'ide-inbox-cron',
+        config: {
+          targetDatabase: 'Content Pipeline (95850fb41686446aaec2b94ab3e50b92)',
+          cronSchedule: '0 * * * * (hourly)',
+          taskType: 'Content Writer Batch',
+          batchSize: 5
+        }
       });
     }
 
@@ -200,50 +202,30 @@ export default {
 /**
  * Get pending tasks to process
  *
- * This can be extended to:
- * - Query from a database
- * - Generate from rules/templates
- * - Pull from a queue in KV
+ * Generates Content Writer batch tasks for the Content Pipeline
  */
 async function getPendingTasks(env: Env): Promise<TaskPayload[]> {
   const tasks: TaskPayload[] = [];
 
-  // Option 1: Generate from time-based rules
-  const hour = new Date().getHours();
+  // Generate timestamp for batch title
+  const timestamp = new Date().toISOString();
+  const formattedTime = new Date().toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
 
-  // Morning tasks (6-11 AM)
-  if (hour >= 6 && hour < 12) {
-    tasks.push({
-      title: 'Daily Code Review',
-      description: `Review pull requests and code changes from ${new Date().toLocaleDateString()}`,
-      priority: 'High'
-    });
-  }
-
-  // Afternoon tasks (12-17 PM)
-  if (hour >= 12 && hour < 18) {
-    tasks.push({
-      title: 'Integration Testing',
-      description: 'Run integration tests and verify system health',
-      priority: 'Medium'
-    });
-  }
-
-  // Evening tasks (18-23 PM)
-  if (hour >= 18 && hour < 24) {
-    tasks.push({
-      title: 'Deployment Checklist',
-      description: 'Verify staging environment and prepare deployment',
-      priority: 'Low'
-    });
-  }
-
-  // Option 2: Query from KV queue
-  // const queuedTasks = await env.TASK_QUEUE?.get('pending_tasks');
-  // if (queuedTasks) {
-  //   const parsed = JSON.parse(queuedTasks) as TaskPayload[];
-  //   tasks.push(...parsed);
-  // }
+  // Create Content Writer batch task
+  tasks.push({
+    title: `Write Content Batch — ${formattedTime}`,
+    description: `Hourly batch trigger. Write 5 articles from Content Lines with Status=Active. Round-robin from active outlines, prioritizing oldest entries first (Status = Outline Needed or Queued).`,
+    status: 'Queued',
+    priority: 'High'
+  });
 
   return tasks;
 }
@@ -293,23 +275,15 @@ async function createNotionPage(env: Env, task: TaskPayload): Promise<{
 }
 
 /**
- * Build Notion page object from task payload
+ * Build Notion page object from task payload for Content Pipeline
  */
 function buildNotionPage(databaseId: string, task: TaskPayload): NotionPage {
-  // Map priority values to match database options
-  const priorityMap: Record<string, string> = {
-    'Low': 'Low',
-    'Medium': 'Normal',
-    'High': 'High',
-    'Urgent': 'Urgent'
-  };
-
   const page: NotionPage = {
     parent: {
       database_id: databaseId
     },
     properties: {
-      Request: {
+      Title: {
         title: [
           {
             text: {
@@ -318,26 +292,27 @@ function buildNotionPage(databaseId: string, task: TaskPayload): NotionPage {
           }
         ]
       },
-      "Requested By": {
-        rich_text: [
-          {
-            text: {
-              content: 'IDE Cron Worker'
-            }
-          }
-        ]
-      },
       Status: {
         status: {
-          name: task.status || 'New'
+          name: task.status || 'Queued'
+        }
+      },
+      Agent: {
+        select: {
+          name: 'Content Writer'
+        }
+      },
+      "Content Type": {
+        select: {
+          name: 'Blog Post'
         }
       }
     }
   };
 
-  // Add description if provided
+  // Add description as Notes if provided
   if (task.description) {
-    page.properties.Details = {
+    page.properties.Notes = {
       rich_text: [
         {
           text: {
@@ -345,15 +320,6 @@ function buildNotionPage(databaseId: string, task: TaskPayload): NotionPage {
           }
         }
       ]
-    };
-  }
-
-  // Add priority if provided
-  if (task.priority) {
-    page.properties.Priority = {
-      select: {
-        name: priorityMap[task.priority] || 'Normal'
-      }
     };
   }
 
